@@ -30,7 +30,7 @@ class HttpCommandExecutor implements WebDriverCommandExecutor
      * @see
      *   http://code.google.com/p/selenium/wiki/JsonWireProtocol#Command_Reference
      */
-    protected static $commands = [
+    protected $commands = [
         DriverCommand::ACCEPT_ALERT => ['method' => 'POST', 'url' => '/session/:sessionId/accept_alert'],
         DriverCommand::ADD_COOKIE => ['method' => 'POST', 'url' => '/session/:sessionId/cookie'],
         DriverCommand::CLEAR_ELEMENT => ['method' => 'POST', 'url' => '/session/:sessionId/element/:id/clear'],
@@ -138,9 +138,21 @@ class HttpCommandExecutor implements WebDriverCommandExecutor
      */
     protected $url;
     /**
-     * @var resource
+     * @var string
      */
-    protected $curl;
+    protected $http_proxy;
+    /**
+     * @var int
+     */
+    protected $http_proxy_port;
+    /**
+     * @var int
+     */
+    protected $connection_timeout;
+    /**
+     * @var int
+     */
+    protected $request_timeout;
 
     /**
      * @param string $url
@@ -150,36 +162,8 @@ class HttpCommandExecutor implements WebDriverCommandExecutor
     public function __construct($url, $http_proxy = null, $http_proxy_port = null)
     {
         $this->url = $url;
-        $this->curl = curl_init();
-
-        if (!empty($http_proxy)) {
-            curl_setopt($this->curl, CURLOPT_PROXY, $http_proxy);
-            if ($http_proxy_port !== null) {
-                curl_setopt($this->curl, CURLOPT_PROXYPORT, $http_proxy_port);
-            }
-        }
-
-        // Get credentials from $url (if any)
-        $matches = null;
-        if (preg_match("/^(https?:\/\/)(.*):(.*)@(.*?)/U", $url, $matches)) {
-            $this->url = $matches[1] . $matches[4];
-            $auth_creds = $matches[2] . ':' . $matches[3];
-            curl_setopt($this->curl, CURLOPT_HTTPAUTH, CURLAUTH_ANY);
-            curl_setopt($this->curl, CURLOPT_USERPWD, $auth_creds);
-        }
-
-        curl_setopt($this->curl, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($this->curl, CURLOPT_FOLLOWLOCATION, true);
-        curl_setopt(
-            $this->curl,
-            CURLOPT_HTTPHEADER,
-            [
-                'Content-Type: application/json;charset=UTF-8',
-                'Accept: application/json',
-            ]
-        );
-        $this->setRequestTimeout(30000);
-        $this->setConnectionTimeout(30000);
+        $this->http_proxy = $http_proxy;
+        $this->http_proxy_port = $http_proxy_port;
     }
 
     /**
@@ -190,13 +174,7 @@ class HttpCommandExecutor implements WebDriverCommandExecutor
      */
     public function setConnectionTimeout($timeout_in_ms)
     {
-        // There is a PHP bug in some versions which didn't define the constant.
-        curl_setopt(
-            $this->curl,
-            /* CURLOPT_CONNECTTIMEOUT_MS */
-            156,
-            $timeout_in_ms
-        );
+        $this->connection_timeout = $timeout_in_ms;
 
         return $this;
     }
@@ -209,14 +187,7 @@ class HttpCommandExecutor implements WebDriverCommandExecutor
      */
     public function setRequestTimeout($timeout_in_ms)
     {
-        // There is a PHP bug in some versions (at least for PHP 5.3.3) which
-        // didn't define the constant.
-        curl_setopt(
-            $this->curl,
-            /* CURLOPT_TIMEOUT_MS */
-            155,
-            $timeout_in_ms
-        );
+        $this->request_timeout = $timeout_in_ms;
 
         return $this;
     }
@@ -229,11 +200,11 @@ class HttpCommandExecutor implements WebDriverCommandExecutor
      */
     public function execute(WebDriverCommand $command)
     {
-        if (!isset(self::$commands[$command->getName()])) {
+        if (!isset($this->commands[$command->getName()])) {
             throw new InvalidArgumentException($command->getName() . ' is not a valid command.');
         }
 
-        $raw = self::$commands[$command->getName()];
+        $raw = $this->commands[$command->getName()];
         $http_method = $raw['method'];
         $url = $raw['url'];
         $url = str_replace(':sessionId', $command->getSessionID(), $url);
@@ -255,13 +226,72 @@ class HttpCommandExecutor implements WebDriverCommandExecutor
             ));
         }
 
-        curl_setopt($this->curl, CURLOPT_URL, $this->url . $url);
+
+
+
+        $curl = curl_init();
+
+        if (!empty($http_proxy)) {
+            curl_setopt($curl, CURLOPT_PROXY, $http_proxy);
+            if (!empty($http_proxy_port)) {
+                curl_setopt($curl, CURLOPT_PROXYPORT, $http_proxy_port);
+            }
+        }
+
+        // Get credentials from $url (if any)
+        $matches = null;
+        if (preg_match("/^(https?:\/\/)(.*):(.*)@(.*?)/U", $url, $matches)) {
+            $this->url = $matches[1] . $matches[4];
+            $auth_creds = $matches[2] . ':' . $matches[3];
+            curl_setopt($curl, CURLOPT_HTTPAUTH, CURLAUTH_ANY);
+            curl_setopt($curl, CURLOPT_USERPWD, $auth_creds);
+        }
+
+        curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($curl, CURLOPT_FOLLOWLOCATION, true);
+        curl_setopt(
+            $curl,
+            CURLOPT_HTTPHEADER,
+            [
+                'Content-Type: application/json;charset=UTF-8',
+                'Accept: application/json',
+            ]
+        );
+        $this->setRequestTimeout(30000);
+        $this->setConnectionTimeout(30000);
+
+
+
+
+
+        // There is a PHP bug in some versions which didn't define the constant.
+        curl_setopt(
+            $curl,
+            /* CURLOPT_CONNECTTIMEOUT_MS */
+            156,
+            $this->connection_timeout
+        );
+
+        // There is a PHP bug in some versions (at least for PHP 5.3.3) which
+        // didn't define the constant.
+        curl_setopt(
+            $curl,
+            /* CURLOPT_TIMEOUT_MS */
+            155,
+            $this->request_timeout
+        );
+
+
+
+
+
+        curl_setopt($curl, CURLOPT_URL, $this->url . $url);
 
         // https://github.com/facebook/php-webdriver/issues/173
         if ($command->getName() === DriverCommand::NEW_SESSION) {
-            curl_setopt($this->curl, CURLOPT_POST, 1);
+            curl_setopt($curl, CURLOPT_POST, 1);
         } else {
-            curl_setopt($this->curl, CURLOPT_CUSTOMREQUEST, $http_method);
+            curl_setopt($curl, CURLOPT_CUSTOMREQUEST, $http_method);
         }
 
         $encoded_params = null;
@@ -270,11 +300,11 @@ class HttpCommandExecutor implements WebDriverCommandExecutor
             $encoded_params = json_encode($params);
         }
 
-        curl_setopt($this->curl, CURLOPT_POSTFIELDS, $encoded_params);
+        curl_setopt($curl, CURLOPT_POSTFIELDS, $encoded_params);
 
-        $raw_results = trim(curl_exec($this->curl));
+        $raw_results = trim(curl_exec($curl));
 
-        if ($error = curl_error($this->curl)) {
+        if ($error = curl_error($curl)) {
             $msg = sprintf(
                 'Curl error thrown for http %s to %s',
                 $http_method,

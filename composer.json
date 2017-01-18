@@ -1,14 +1,13 @@
 {
-  "name": "facebook/webdriver",
+  "name": "lireincore/webdriver",
   "description": "A PHP client for WebDriver",
-  "keywords": ["webdriver", "selenium", "php", "facebook"],
-  "homepage": "https://github.com/facebook/php-webdriver",
+  "keywords": ["webdriver", "selenium"],
+  "homepage": "https://github.com/lireincore/webdriver",
   "type": "library",
   "license": "Apache-2.0",
   "support": {
-    "issues": "https://github.com/facebook/php-webdriver/issues",
-    "forum": "https://www.facebook.com/groups/phpwebdriver/",
-    "source": "https://github.com/facebook/php-webdriver"
+    "issues": "https://github.com/lireincore/webdriver/issues",
+    "source": "https://github.com/lireincore/webdriver"
   },
   "require": {
     "php": "^5.5 || ~7.0",
